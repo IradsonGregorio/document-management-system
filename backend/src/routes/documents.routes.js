@@ -1,28 +1,52 @@
 const path = require('node:path');
-const fs = require('node:fs');
+const { randomUUID } = require('node:crypto');
 const multer = require('multer');
 const express = require('express');
 const documentsController = require('../controllers/documents.controller');
+const {
+  STORAGE_DIRECTORY,
+  MAX_UPLOAD_SIZE_BYTES,
+  ALLOWED_MIME_TYPES,
+  ensureStorageDirectory,
+} = require('../config/storage.config');
 
 const router = express.Router();
-const storageDirectory = path.resolve(__dirname, '../../storage');
+ensureStorageDirectory();
 
-if (!fs.existsSync(storageDirectory)) {
-  fs.mkdirSync(storageDirectory, { recursive: true });
+function getSafeExtension(fileName) {
+  const extension = path.extname(fileName || '').toLowerCase();
+  return /^[.][a-z0-9]{1,10}$/.test(extension) ? extension : '';
 }
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, storageDirectory);
+    cb(null, STORAGE_DIRECTORY);
   },
   filename: (req, file, cb) => {
-    const timestamp = Date.now();
-    const safeOriginalName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-    cb(null, `${timestamp}-${safeOriginalName}`);
+    const extension = getSafeExtension(file.originalname);
+    cb(null, `${randomUUID()}${extension}`);
   },
 });
 
-const upload = multer({ storage });
+function fileFilter(req, file, cb) {
+  if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+    const error = new Error('Tipo de arquivo não permitido.');
+    error.statusCode = 400;
+    cb(error);
+    return;
+  }
+
+  cb(null, true);
+}
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: MAX_UPLOAD_SIZE_BYTES,
+    files: 1,
+  },
+});
 
 router.post('/upload', upload.single('file'), documentsController.uploadDocument);
 router.get('/documents', documentsController.listDocuments);

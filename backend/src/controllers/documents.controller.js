@@ -5,40 +5,34 @@ function getOwnerFromRequest(req) {
   return ownerHeader && ownerHeader.trim() ? ownerHeader.trim() : 'anonymous';
 }
 
-function handleError(res, error) {
-  const statusCode = error.statusCode || 500;
-  const message = statusCode === 500 ? 'Erro interno no servidor.' : error.message;
-  res.status(statusCode).json({ error: message });
-}
-
-function uploadDocument(req, res) {
+function uploadDocument(req, res, next) {
   try {
     const owner = getOwnerFromRequest(req);
     const savedDocument = documentsService.saveUploadedDocument(req.file, owner);
 
     res.status(201).json(savedDocument);
   } catch (error) {
-    handleError(res, error);
+    next(error);
   }
 }
 
-function listDocuments(req, res) {
+function listDocuments(req, res, next) {
   try {
     const documents = documentsService.listDocuments();
     res.json(documents);
   } catch (error) {
-    handleError(res, error);
+    next(error);
   }
 }
 
-async function downloadDocument(req, res) {
+async function downloadDocument(req, res, next) {
   try {
     const { id } = req.params;
     const downloadData = await documentsService.getDocumentDownloadData(id);
 
     res.download(downloadData.filePath, downloadData.originalName);
   } catch (error) {
-    handleError(res, error);
+    next(error);
   }
 }
 
