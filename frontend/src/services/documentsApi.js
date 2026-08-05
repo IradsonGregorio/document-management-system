@@ -1,11 +1,18 @@
 const API_BASE = '/api';
 
 async function parseError(response) {
+  const contentType = response.headers.get('content-type') || '';
+
   try {
-    const data = await response.json();
-    return data.error || 'Erro inesperado na API.';
+    if (contentType.includes('application/json')) {
+      const data = await response.json();
+      return data.error || 'Erro inesperado na API.';
+    }
+
+    const text = await response.text();
+    return text || 'Erro inesperado na API.';
   } catch {
-    return 'Erro inesperado na API.';
+    return `Erro inesperado na API (${response.status}).`;
   }
 }
 
@@ -38,8 +45,10 @@ export async function uploadDocument(file, owner) {
   return response.json();
 }
 
-export async function listDocuments() {
-  const response = await request('/documents');
+export async function listDocuments(options = {}) {
+  const response = await request('/documents', {
+    signal: options.signal,
+  });
   return response.json();
 }
 
