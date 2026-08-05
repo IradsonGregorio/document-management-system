@@ -8,6 +8,25 @@ let server;
 let baseUrl;
 const uploadedFileNames = [];
 
+async function uploadPlainTextDocument({
+  fileName = 'teste.txt',
+  content = 'conteudo de teste',
+  owner = 'qa-user',
+} = {}) {
+  const formData = new FormData();
+  formData.append('file', new Blob([content], { type: 'text/plain' }), fileName);
+
+  const response = await fetch(`${baseUrl}/upload`, {
+    method: 'POST',
+    headers: {
+      'x-user-id': owner,
+    },
+    body: formData,
+  });
+
+  return { response, content, owner, fileName };
+}
+
 before(async () => {
   server = app.listen(0);
   await new Promise((resolve) => {
@@ -50,48 +69,59 @@ test('GET /health responde status ok', async () => {
 });
 
 test('POST /upload envia arquivo e retorna metadados', async () => {
-  const formData = new FormData();
-  const content = 'conteudo de teste';
-  formData.append('file', new Blob([content], { type: 'text/plain' }), 'teste.txt');
-
-  const response = await fetch(`${baseUrl}/upload`, {
-    method: 'POST',
-    headers: {
-      'x-user-id': 'qa-user',
-    },
-    body: formData,
-  });
+  const { response, owner, fileName } = await uploadPlainTextDocument();
 
   assert.strictEqual(response.status, 201);
   const payload = await response.json();
   assert.ok(payload.id);
-  assert.strictEqual(payload.owner, 'qa-user');
-  assert.strictEqual(payload.originalName, 'teste.txt');
+  assert.strictEqual(payload.owner, owner);
+  assert.strictEqual(payload.originalName, fileName);
   assert.ok(payload.fileName);
   uploadedFileNames.push(payload.fileName);
 });
 
 test('GET /documents lista documentos enviados', async () => {
+  const uploadResult = await uploadPlainTextDocument({
+    fileName: 'lista.txt',
+    content: 'arquivo para validar listagem',
+    owner: 'list-user',
+  });
+
+  assert.strictEqual(uploadResult.response.status, 201);
+  const uploadedDocument = await uploadResult.response.json();
+  uploadedFileNames.push(uploadedDocument.fileName);
+
   const response = await fetch(`${baseUrl}/documents`);
 
   assert.strictEqual(response.status, 200);
   const payload = await response.json();
   assert.ok(Array.isArray(payload));
   assert.ok(payload.length >= 1);
+  const listedDocument = payload.find((document) => document.id === uploadedDocument.id);
+  assert.ok(listedDocument);
+  assert.strictEqual(listedDocument.owner, 'list-user');
+  assert.strictEqual(listedDocument.originalName, 'lista.txt');
 });
 
 test('GET /documents/:id/download baixa arquivo existente', async () => {
-  const documentsResponse = await fetch(`${baseUrl}/documents`);
-  const documents = await documentsResponse.json();
-  const firstDocument = documents[0];
+  const uploadResult = await uploadPlainTextDocument({
+    fileName: 'download.txt',
+    content: 'conteudo para baixar',
+    owner: 'download-user',
+  });
 
-  assert.ok(firstDocument?.id);
+  assert.strictEqual(uploadResult.response.status, 201);
+  const uploadedDocument = await uploadResult.response.json();
+  uploadedFileNames.push(uploadedDocument.fileName);
 
-  const response = await fetch(`${baseUrl}/documents/${firstDocument.id}/download`);
+  const response = await fetch(`${baseUrl}/documents/${uploadedDocument.id}/download`);
 
   assert.strictEqual(response.status, 200);
+  const contentDisposition = response.headers.get('content-disposition') || '';
+  assert.ok(contentDisposition.includes('attachment'));
+  assert.ok(contentDisposition.includes('download.txt'));
   const body = await response.text();
-  assert.ok(body.length > 0);
+  assert.strictEqual(body, 'conteudo para baixar');
 });
 
 test('POST /upload retorna 400 sem arquivo', async () => {
