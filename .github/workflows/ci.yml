@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configura Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Instala dependências do backend
+        working-directory: backend
+        run: npm install
+
+      - name: Roda os testes do backend
+        working-directory: backend
+        run: npm test
+
+      - name: Instala dependências do frontend
+        working-directory: frontend
+        run: npm install
+
+      - name: Builda o frontend
+        working-directory: frontend
+        run: npm run build
